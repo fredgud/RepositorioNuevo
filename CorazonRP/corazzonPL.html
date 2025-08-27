@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Regresión Logística Múltiple - Heart Disease Prediction</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      background: linear-gradient(120deg, #fce4ec, #e3f2fd);
+      text-align: center;
+      padding: 20px;
+      color: #333;
+    }
+    h1 {
+      color: #2c3e50;
+      margin-bottom: 10px;
+    }
+    #status {
+      font-weight: bold;
+      margin: 10px 0;
+      color: #00695c;
+    }
+    button {
+      padding: 12px 24px;
+      margin: 10px;
+      border: none;
+      background: #4CAF50;
+      color: white;
+      font-size: 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+    button:hover:not(:disabled) {
+      background: #388E3C;
+      transform: scale(1.05);
+    }
+    button:disabled {
+      background: #999;
+      cursor: not-allowed;
+    }
+    .card {
+      margin: 20px auto;
+      max-width: 500px;
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      text-align: left;
+    }
+    .card h3 { margin-top: 0; color: #2c3e50; }
+    .input-box { display: flex; margin-top: 10px; flex-direction: column; gap: 10px; }
+    .input-box input {
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+    #predictionBox {
+      margin-top: 15px;
+      font-size: 18px;
+      font-weight: bold;
+    }
+    .positivo { color: red; }
+    .negativo { color: green; }
+    .infografia {
+      margin: 30px auto;
+      max-width: 600px;
+      background: #fffde7;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      text-align: left;
+      line-height: 1.6;
+    }
+    .infografia h2 { color: #e65100; margin-top: 0; }
+    #metrics {
+      margin-top: 15px;
+      font-size: 16px;
+      background: #e1f5fe;
+      padding: 12px;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>❤️ Regresión Logística Múltiple - Heart Disease Prediction</h1>
+
+  <input type="file" id="fileInput" accept=".csv">
+  <p id="status">Estado: esperando archivo…</p>
+
+  <button id="trainBtn" disabled>⚙️ Entrenar Modelo</button>
+
+  <div class="card">
+    <h3>🔮 Predicción</h3>
+    <div class="input-box">
+      <input type="number" id="ageInput" placeholder="Edad (age)">
+      <input type="number" id="cholInput" placeholder="Colesterol (chol)">
+      <button id="predictBtn" disabled>Predecir</button>
+    </div>
+    <div id="predictionBox">Resultado: —</div>
+  </div>
+
+  <div class="infografia" id="infografia" style="display:none;">
+    <h2>📝 Infografía del Modelo</h2>
+    <p><b>Variables independientes (X):</b> Edad (<code>age</code>) y Colesterol (<code>chol</code>)</p>
+    <p><b>Variable dependiente (Y):</b> Enfermedad cardíaca (0 = No, 1 = Sí)</p>
+    <p><b>Método aplicado:</b> Regresión Logística Múltiple con Gradiente Descendente.</p>
+    <p style="text-align:center; font-weight:bold;" id="equation"></p>
+    <div id="metrics"></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+  <script>
+    let dataX1 = []; // age
+    let dataX2 = []; // chol
+    let dataY = [];
+    let w1 = 0, w2 = 0, bias = 0;
+
+    const fileInput = document.getElementById("fileInput");
+    const status = document.getElementById("status");
+    const trainBtn = document.getElementById("trainBtn");
+    const predictBtn = document.getElementById("predictBtn");
+    const ageInput = document.getElementById("ageInput");
+    const cholInput = document.getElementById("cholInput");
+    const predictionBox = document.getElementById("predictionBox");
+    const equationBox = document.getElementById("equation");
+    const infografia = document.getElementById("infografia");
+    const metricsBox = document.getElementById("metrics");
+
+    function sigmoid(z) {
+      return 1 / (1 + Math.exp(-z));
+    }
+
+    fileInput.addEventListener("change", function(e) {
+      const file = e.target.files[0];
+      Papa.parse(file, {
+        header: true,
+        dynamicTyping: true,
+        complete: function(results) {
+          dataX1 = results.data.map(r => r.age).filter(v => !isNaN(v));
+          dataX2 = results.data.map(r => r.chol).filter(v => !isNaN(v));
+          dataY  = results.data.map(r => r.target).filter(v => v===0 || v===1);
+
+          if(dataX1.length>0 && dataX2.length>0 && dataY.length>0){
+            status.textContent = "✅ Archivo cargado correctamente";
+            trainBtn.disabled = false;
+          } else {
+            status.textContent = "⚠️ No se encontraron columnas 'age', 'chol' y 'target'";
+          }
+        }
+      });
+    });
+
+    trainBtn.addEventListener("click", () => {
+      let lr = 0.0001;
+      let epochs = 5000;
+      w1 = 0; w2 = 0; bias = 0;
+
+      for (let i=0;i<epochs;i++) {
+        let dw1=0, dw2=0, db=0;
+        for (let j=0;j<dataY.length;j++) {
+          let x1 = dataX1[j];
+          let x2 = dataX2[j];
+          let y = dataY[j];
+          let z = w1*x1 + w2*x2 + bias;
+          let y_pred = sigmoid(z);
+          dw1 += (y_pred - y)*x1;
+          dw2 += (y_pred - y)*x2;
+          db  += (y_pred - y);
+        }
+        w1 -= lr*dw1/dataY.length;
+        w2 -= lr*dw2/dataY.length;
+        bias -= lr*db/dataY.length;
+      }
+
+      // Métricas
+      let tp=0, tn=0, fp=0, fn=0;
+      for (let i=0;i<dataY.length;i++) {
+        let prob = sigmoid(w1*dataX1[i]+w2*dataX2[i]+bias);
+        let pred = prob>=0.5?1:0;
+        if(pred===1 && dataY[i]===1) tp++;
+        else if(pred===0 && dataY[i]===0) tn++;
+        else if(pred===1 && dataY[i]===0) fp++;
+        else if(pred===0 && dataY[i]===1) fn++;
+      }
+      let accuracy = (tp+tn)/(tp+tn+fp+fn);
+      let precision = tp/(tp+fp || 1);
+      let recall = tp/(tp+fn || 1);
+      let f1 = 2*precision*recall/(precision+recall || 1);
+
+      status.textContent = 📐 Modelo entrenado con ${epochs} iteraciones;
+      equationBox.textContent = P(y=1|x) = sigmoid(${w1.toFixed(4)}·age + ${w2.toFixed(4)}·chol + ${bias.toFixed(4)});
+      metricsBox.innerHTML = `
+        <h3>📊 Métricas del Modelo</h3>
+        <p><b>Accuracy:</b> ${(accuracy*100).toFixed(2)}%</p>
+        <p><b>Precision:</b> ${(precision*100).toFixed(2)}%</p>
+        <p><b>Recall:</b> ${(recall*100).toFixed(2)}%</p>
+        <p><b>F1-score:</b> ${(f1*100).toFixed(2)}%</p>
+      `;
+
+      predictBtn.disabled = false;
+      infografia.style.display = "block";
+    });
+
+    predictBtn.addEventListener("click", () => {
+      const age = parseFloat(ageInput.value);
+      const chol = parseFloat(cholInput.value);
+      if(!isNaN(age) && !isNaN(chol)){
+        const prob = sigmoid(w1*age + w2*chol + bias);
+        const pred = prob>=0.5 ? 
+          <span class="positivo">❤️ Positivo (Enfermedad)</span> : 
+          <span class="negativo">💚 Negativo (No enfermedad)</span>;
+        predictionBox.innerHTML = Probabilidad: ${(prob*100).toFixed(2)}% → ${pred};
+      } else {
+        predictionBox.textContent = "⚠️ Ingrese valores válidos";
+      }
+    });
+  </script>
+</body>
+</html>
