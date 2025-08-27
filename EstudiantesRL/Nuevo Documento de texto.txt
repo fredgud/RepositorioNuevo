@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Regresión Lineal - Student Performance</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      background: linear-gradient(120deg, #e0f7fa, #fce4ec);
+      text-align: center;
+      padding: 20px;
+      color: #333;
+    }
+    h1 {
+      color: #2c3e50;
+      margin-bottom: 10px;
+    }
+    #status {
+      font-weight: bold;
+      margin: 10px 0;
+      color: #00695c;
+    }
+    #buttons {
+      margin-top: 20px;
+    }
+    button {
+      padding: 12px 24px;
+      margin: 10px;
+      border: none;
+      background: #4CAF50;
+      color: white;
+      font-size: 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+    button:hover:not(:disabled) {
+      background: #388E3C;
+      transform: scale(1.05);
+    }
+    button:disabled {
+      background: #999;
+      cursor: not-allowed;
+    }
+    canvas {
+      margin-top: 20px;
+      background: #fff;
+      padding: 10px;
+      border-radius: 10px;
+      box-shadow: 0 3px 6px rgba(0,0,0,0.2);
+    }
+    .card {
+      margin: 20px auto;
+      max-width: 500px;
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      text-align: left;
+    }
+    .card h3 {
+      margin-top: 0;
+      color: #2c3e50;
+    }
+    .input-box {
+      display: flex;
+      margin-top: 10px;
+    }
+    .input-box input {
+      flex: 1;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 6px 0 0 6px;
+    }
+    .input-box button {
+      border-radius: 0 6px 6px 0;
+      margin: 0;
+    }
+    #predictionBox {
+      margin-top: 15px;
+      font-size: 18px;
+      font-weight: bold;
+      color: #2c3e50;
+    }
+    .aprobado {
+      color: green;
+    }
+    .desaprobado {
+      color: red;
+    }
+    .infografia {
+      margin: 30px auto;
+      max-width: 600px;
+      background: #fff3e0;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      text-align: left;
+      line-height: 1.6;
+    }
+    .infografia h2 {
+      color: #e65100;
+      margin-top: 0;
+    }
+    #metrics {
+      margin-top: 15px;
+      font-size: 16px;
+      background: #e3f2fd;
+      padding: 12px;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>📊 Regresión Lineal - Student Performance</h1>
+
+  <input type="file" id="fileInput" accept=".csv">
+  <p id="status">Estado: esperando archivo…</p>
+
+  <div id="buttons">
+    <button id="trainBtn" disabled>⚙️ Entrenar Modelo</button>
+  </div>
+
+  <canvas id="chart" width="600" height="400"></canvas>
+
+  <div class="card">
+    <h3>🔮 Predicción</h3>
+    <div class="input-box">
+      <input type="number" id="studytimeInput" placeholder="Ingrese horas de estudio">
+      <button id="predictBtn" disabled>Predecir</button>
+    </div>
+    <div id="predictionBox">Resultado: —</div>
+  </div>
+
+  <div class="infografia" id="infografia" style="display:none;">
+    <h2>📝 Infografía del Modelo</h2>
+    <p><b>Variable independiente (X):</b> Horas de estudio (<code>studytime</code>)</p>
+    <p><b>Variable dependiente (Y):</b> Nota final del estudiante (<code>G3</code>)</p>
+    <p><b>Método aplicado:</b> Regresión Lineal por mínimos cuadrados.</p>
+    <p>Se ajustó una línea recta que modela la relación:</p>
+    <p style="text-align:center; font-weight:bold;" id="equation"></p>
+
+    <!-- Nueva sección de métricas -->
+    <div id="metrics"></div>
+
+    <p>✔ Permite <b>predecir notas</b> según las horas de estudio.<br>
+       ✔ También clasifica si el estudiante <b>aprueba (≥10)</b> o <b>desaprueba (<10)</b>.</p>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    let dataX = [];
+    let dataY = [];
+    let slope = 0, intercept = 0;
+
+    const fileInput = document.getElementById("fileInput");
+    const status = document.getElementById("status");
+    const trainBtn = document.getElementById("trainBtn");
+    const predictBtn = document.getElementById("predictBtn");
+    const studytimeInput = document.getElementById("studytimeInput");
+    const predictionBox = document.getElementById("predictionBox");
+    const equationBox = document.getElementById("equation");
+    const infografia = document.getElementById("infografia");
+    const metricsBox = document.getElementById("metrics");
+    const ctx = document.getElementById("chart").getContext("2d");
+
+    let chart;
+
+    // Leer archivo CSV
+    fileInput.addEventListener("change", function(e) {
+      const file = e.target.files[0];
+      Papa.parse(file, {
+        header: true,
+        dynamicTyping: true,
+        complete: function(results) {
+          dataX = results.data.map(r => r.studytime).filter(v => !isNaN(v));
+          dataY = results.data.map(r => r.G3).filter(v => !isNaN(v));
+          
+          status.textContent = "✅ Archivo cargado correctamente";
+          trainBtn.disabled = false; 
+        }
+      });
+    });
+
+    // Entrenar modelo (mínimos cuadrados)
+    trainBtn.addEventListener("click", () => {
+      const n = dataX.length;
+      const meanX = dataX.reduce((a,b) => a+b,0)/n;
+      const meanY = dataY.reduce((a,b) => a+b,0)/n;
+
+      let num = 0, den = 0;
+      for (let i=0;i<n;i++) {
+        num += (dataX[i]-meanX)*(dataY[i]-meanY);
+        den += (dataX[i]-meanX)**2;
+      }
+      slope = num/den;
+      intercept = meanY - slope*meanX;
+
+      // Predicciones y métricas
+      let yPred = dataX.map(x => slope*x + intercept);
+      let ssRes = 0, ssTot = 0;
+      let mae = 0, mse = 0;
+      for (let i=0;i<n;i++) {
+        let error = dataY[i] - yPred[i];
+        ssRes += error**2;
+        ssTot += (dataY[i]-meanY)**2;
+        mae += Math.abs(error);
+        mse += error**2;
+      }
+      mae /= n;
+      let rmse = Math.sqrt(mse/n);
+      let r2 = 1 - (ssRes/ssTot);
+
+      status.textContent = 📐 Modelo entrenado (y = ${slope.toFixed(2)}x + ${intercept.toFixed(2)});
+      equationBox.textContent = y = ${slope.toFixed(2)}x + ${intercept.toFixed(2)};
+      metricsBox.innerHTML = `
+        <h3>📈 Métricas del Modelo</h3>
+        <p><b>R²:</b> ${r2.toFixed(3)}</p>
+        <p><b>MAE:</b> ${mae.toFixed(3)}</p>
+        <p><b>RMSE:</b> ${rmse.toFixed(3)}</p>
+      `;
+
+      predictBtn.disabled = false;
+      infografia.style.display = "block"; // mostrar infografía
+
+      if(chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: 'scatter',
+        data: {
+          datasets: [
+            {
+              label: 'Datos Reales',
+              data: dataX.map((x,i)=>({x:x,y:dataY[i]})),
+              backgroundColor: 'rgba(33, 150, 243, 0.7)'
+            },
+            {
+              label: 'Recta de Regresión',
+              data: [
+                {x: Math.min(...dataX), y: slope*Math.min(...dataX)+intercept},
+                {x: Math.max(...dataX), y: slope*Math.max(...dataX)+intercept}
+              ],
+              type: 'line',
+              borderColor: '#e91e63',
+              borderWidth: 2
+            }
+          ]
+        },
+        options: { responsive: false }
+      });
+    });
+
+    // Predecir en el box + clasificación
+    predictBtn.addEventListener("click", () => {
+      const x = parseFloat(studytimeInput.value);
+      if (!isNaN(x)) {
+        const yPred = slope*x + intercept;
+        const clasificacion = yPred >= 10 ? 
+          <span class="aprobado">✅ Aprobado</span> : 
+          <span class="desaprobado">❌ Desaprobado</span>;
+        predictionBox.innerHTML = Resultado: Nota esperada ≈ ${yPred.toFixed(2)} → ${clasificacion};
+      } else {
+        predictionBox.textContent = "⚠️ Ingrese un número válido";
+      }
+    });
+  </script>
+</body>
+</html>
